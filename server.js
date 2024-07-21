@@ -27,7 +27,7 @@ webSocketServer.on("request", (request) => {
       for (const [k, msg] of buffers.entries()) {
         connection.send(JSON.stringify(msg));
       }
-    } else if ("text" in msg) {
+    } else if ("text" in msg || "insert" in msg) {
       broadcast(msg);
       if (msg.submit) buffers.delete(msg.login);
       else buffers.set(msg.login, msg)

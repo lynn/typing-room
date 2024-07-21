@@ -6,19 +6,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Typing room</title>
   <style>
-    * {
-      box-sizing: border-box;
-    }
-
     @keyframes blink {
         from, to { border-color: black; }
         50% { border-color: transparent; }
     }
 
+    * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
+    input { font-family: inherit; flex: 1; }
     li { white-space: pre-wrap; }
     li span.cursor { animation: blink 1s step-end infinite; border-left: 1px solid black; margin-left: -1px; }
     li span.selected { color: white; background: blue; }
+    .presence-list { max-height: 200px; overflow-y: auto; }
+    .compose { display: flex; justify-content: stretch; height: 2em; }
+    .status.connected { color: green; }
+    .status.disconnected { color: red; }
+    .user-count { display: none; }
+    .status.connected+.user-count { display: inline; }
 
     body {
       background-color: #dfe;
@@ -42,33 +46,7 @@
       overflow-y: scroll;
       display: flex;
       flex-direction: column;
-    }
-
-    .compose {
-      display: flex;
-      justify-content: stretch;
-      height: 2em;
-    }
-
-    input {
-      font-family: inherit;
-      flex: 1;
-    }
-
-    .user-count {
-      display: none;
-    }
-
-    .status.connected {
-      color: green;
-    }
-
-    .status.disconnected {
-      color: red;
-    }
-
-    .status.connected+.user-count {
-      display: inline;
+      min-height: 100px;
     }
   </style>
 </head>
@@ -99,126 +77,7 @@
       <button type="button" onclick="send(true)">Submit</button>
     </div>
   </div>
-  <script type="text/javascript">
-    const compose = document.querySelector(".compose input");
-    const stat = document.querySelector(".status");
-    const url =
-      new URLSearchParams(location.search).get("s") || location.hostname;
-    const ws = new WebSocket(`ws://${url}:3434`);
-    let buffers = {}; // { [id]: { text: string, pos: number } }
-    const id = String(Math.random());
-    let users = 0;
-    let unread = 0;
-
-    function coloredName(name) {
-      let deg = 0;
-      for (const c of name) deg = (223 * deg + c.charCodeAt(0)) % 360;
-      deg = 110 + 0.85 * deg; // avoid ugly yellows
-      const span = document.createElement("span");
-      span.append(name);
-      span.style.color = `oklch(75% 0.15 ${deg})`;
-      return span;
-    }
-
-    ws.onopen = () => {
-      stat.innerHTML = "Connected";
-      stat.className = "status connected";
-      ws.send(JSON.stringify({ login: id }));
-    };
-    ws.onclose = () => {
-      stat.innerHTML = "Closed";
-      stat.className = "status disconnected";
-    };
-    ws.onerror = () => {
-      stat.innerHTML = "Error";
-      stat.className = "status disconnected";
-    };
-    ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data);
-      if (msg.submit) {
-        const li = document.createElement("li");
-        if (document.hidden) document.title = `(${++unread}) Typing room`;
-        li.append("<", coloredName(msg.name), "> " + msg.text);
-        document.querySelector(".message-list").appendChild(li);
-        buffers[msg.id] = null;
-        renderBuffers();
-      } else if (msg.users) {
-        document.querySelector(".user-count").innerText = msg.users === 1 ? "(nobody else here)" : `(${msg.users} users)`;
-      } else if ("text" in msg) {
-        buffers[msg.id] = msg;
-        if (document.hidden && !document.title.includes("(")) document.title = `(*) Typing room`;
-        renderBuffers();
-      } else if ("start" in msg) {
-        const buffer = buffers[msg.id];
-        if (buffer) { buffer.start = msg.start; buffer.end = msg.end; }
-        renderBuffers();
-      } else {
-        console.warn("unrecognized", msg);
-      }
-    };
-    function renderBuffers() {
-      const presenceList = document.querySelector(".presence-list");
-      const children = [];
-      for (const msg of Object.values(buffers).sort()) {
-        if (msg && msg.name && msg.text) {
-          const start = msg.start;
-          const end = msg.end;
-          const li = document.createElement("li");
-          li.append("<", coloredName(msg.name), "> " + msg.text.slice(0, start));
-          const span = document.createElement("span");
-          if (start === end) {
-            span.innerText = msg.text.slice(start); span.className = "cursor";
-            li.append(span);
-          } else {
-            span.innerText = msg.text.slice(start, end); span.className = "selected";
-            const after = document.createElement("span");
-            after.innerText = msg.text.slice(end);
-            li.append(span, after);
-          }
-          children.push(li);
-        }
-      }
-      presenceList.replaceChildren(...children);
-      document.querySelector(".messages").scrollTo(0, 9e9);
-    }
-    function changeName() {
-      const name = document.querySelector(".name-input").value;
-      localStorage.setItem("name", name);
-      compose.disabled = name === "";
-      send(false);
-    }
-    function sendPos(start, end) {
-      if (ws.readyState === 1) {
-        ws.send(JSON.stringify({ id, name, start, end }));
-      }
-    }
-    function send(submit) {
-      if (ws.readyState === 1) {
-        const name = document.querySelector(".name-input").value;
-        const start = compose.selectionStart;
-        const end = compose.selectionEnd;
-        const text = compose.value;
-        ws.send(JSON.stringify({ id, name, start, end, text, submit: text && submit }));
-        if (text && submit) {
-          compose.value = "";
-          compose.focus();
-        }
-      }
-    }
-    compose.addEventListener("keyup", (e) => {
-      sendPos(compose.selectionStart, compose.selectionEnd);
-      if (e.key === "Enter") send(true);
-    });
-    compose.addEventListener("mouseup", (e) => {
-      setTimeout(() => sendPos(compose.selectionStart, compose.selectionEnd), 50);
-    });
-    compose.addEventListener("input", (e) => {
-      send(false);
-    });
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) { unread = 0; document.title = "Typing room"; }
-    });
-  </script>
+  <script src="client.js"></script>
 </body>
 
 </html>
