@@ -2,11 +2,13 @@ const WebSocket = require("websocket").server;
 const http = require("http");
 
 const server = http.createServer((request, response) => {
-  // Handle HTTP requests here
+  response.writeHead(404);
+  response.end();
 });
 
 const webSocketServer = new WebSocket({
   httpServer: server,
+  autoAcceptConnections: false,
 });
 
 let cxs = new Map();
@@ -17,6 +19,10 @@ const broadcast = (x) => {
 };
 
 webSocketServer.on("request", (request) => {
+  if (!request.origin.includes(process.env.SPAT_ORIGIN)) {
+    request.reject();
+    return;
+  }
   const connection = request.accept(null, request.origin);
 
   connection.on("message", (message) => {
@@ -29,7 +35,10 @@ webSocketServer.on("request", (request) => {
       }
     } else if ("text" in msg || "insert" in msg) {
       broadcast(msg);
-      if (msg.submit) buffers.delete(msg.login);
+      if (msg.submit) {
+        console.log(`${new Date()} <\x1b[32m${msg.name}\x1b[0m> ${msg.text}`);
+        buffers.delete(msg.login);
+      }
       else buffers.set(msg.login, msg)
     } else if ("start" in msg) {
       broadcast(msg);
