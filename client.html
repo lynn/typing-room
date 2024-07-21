@@ -113,6 +113,7 @@
     function coloredName(name) {
       let deg = 0;
       for (const c of name) deg = (223 * deg + c.charCodeAt(0)) % 360;
+      deg = 110 + 0.85 * deg; // avoid ugly yellows
       const span = document.createElement("span");
       span.append(name);
       span.style.color = `oklch(75% 0.15 ${deg})`;
@@ -197,7 +198,7 @@
         const start = compose.selectionStart;
         const end = compose.selectionEnd;
         const text = compose.value;
-        ws.send(JSON.stringify({ id, name, start, end, text, submit }));
+        ws.send(JSON.stringify({ id, name, start, end, text, submit: text && submit }));
         if (text && submit) {
           compose.value = "";
           compose.focus();
