@@ -20,6 +20,7 @@ webSocketServer.on("request", (request) => {
   const connection = request.accept(null, request.origin);
 
   connection.on("message", (message) => {
+    if (message.utf8Data.length > 5000) return;
     const msg = JSON.parse(message.utf8Data);
     if ("login" in msg) {
       cxs.set(msg.login, connection); broadcast({users: cxs.size});
