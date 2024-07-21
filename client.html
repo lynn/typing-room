@@ -83,19 +83,19 @@
       </p>
       <p>
         Pick a name to start chatting:
-        <input autofocus class="name-input" onkeyup="changeName()" placeholder="Name" />
+        <input autofocus class="name-input" onkeyup="changeName()" placeholder="Name" maxlength="40" />
       </p>
     </div>
     <div class="messages">
       <ul class="message-list" style="flex: 1">
-        <li><em>Submitted messages will appear here.</em></li>
+        <li><i>Submitted messages will appear here.</i></li>
       </ul>
     </div>
     <ul class="presence-list">
-      <li><em>What others are typing will appear here.</em></li>
+      <li><i>What others are typing will appear here.</i></li>
     </ul>
     <div class="compose">
-      <input disabled placeholder="Type a message..." />
+      <input disabled placeholder="Type a message..." maxlength="4000" />
       <button type="button" onclick="send(true)">Submit</button>
     </div>
   </div>
@@ -109,6 +109,15 @@
     const id = String(Math.random());
     let users = 0;
     let unread = 0;
+
+    function coloredName(name) {
+      let deg = 0;
+      for (const c of name) deg = (223 * deg + c.charCodeAt(0)) % 360;
+      const span = document.createElement("span");
+      span.append(name);
+      span.style.color = `oklch(75% 0.15 ${deg})`;
+      return span;
+    }
 
     ws.onopen = () => {
       stat.innerHTML = "Connected";
@@ -128,12 +137,12 @@
       if (msg.submit) {
         const li = document.createElement("li");
         if (document.hidden) document.title = `(${++unread}) Typing room`;
-        li.innerText = `<${msg.name}> ${msg.text}`;
+        li.append("<", coloredName(msg.name), "> " + msg.text);
         document.querySelector(".message-list").appendChild(li);
         buffers[msg.id] = null;
         renderBuffers();
       } else if (msg.users) {
-        document.querySelector(".user-count").innerText = `(${msg.users} user${msg.users === 1 ? "" : "s"})`;
+        document.querySelector(".user-count").innerText = msg.users === 1 ? "(nobody else here)" : `(${msg.users} users)`;
       } else if ("text" in msg) {
         buffers[msg.id] = msg;
         if (document.hidden && !document.title.includes("(")) document.title = `(*) Typing room`;
@@ -154,17 +163,16 @@
           const start = msg.start;
           const end = msg.end;
           const li = document.createElement("li");
-          li.innerText = `<${msg.name}> ${msg.text.slice(0, start)}`;
+          li.append("<", coloredName(msg.name), "> " + msg.text.slice(0, start));
           const span = document.createElement("span");
           if (start === end) {
             span.innerText = msg.text.slice(start); span.className = "cursor";
-            li.appendChild(span);
+            li.append(span);
           } else {
             span.innerText = msg.text.slice(start, end); span.className = "selected";
-            li.appendChild(span);
             const after = document.createElement("span");
             after.innerText = msg.text.slice(end);
-            li.appendChild(after);
+            li.append(span, after);
           }
           children.push(li);
         }
@@ -190,7 +198,7 @@
         const end = compose.selectionEnd;
         const text = compose.value;
         ws.send(JSON.stringify({ id, name, start, end, text, submit }));
-        if (submit) {
+        if (text && submit) {
           compose.value = "";
           compose.focus();
         }
