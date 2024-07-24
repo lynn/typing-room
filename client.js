@@ -1,4 +1,6 @@
 const compose = document.querySelector(".compose input");
+const messages = document.querySelector(".messages");
+const isScrolledDown = () => Math.ceil(messages.scrollHeight - messages.scrollTop) === messages.clientHeight;
 const stat = document.querySelector(".status");
 const url = new URLSearchParams(location.search).get("s") || location.hostname;
 const ws = new WebSocket(`ws://${url}:3434`);
@@ -76,6 +78,7 @@ ws.onmessage = (event) => {
     const li = document.createElement("li");
     if (document.hidden) document.title = `(${++unread}) Typing room`;
     li.append("<", coloredName(msg.name), "> " + msg.text);
+    const scrolledDown = isScrolledDown();
     document.querySelector(".message-list").appendChild(li);
     buffers[msg.id] = null;
     renderBuffers();
@@ -105,6 +108,7 @@ ws.onmessage = (event) => {
 };
 function renderBuffers() {
   const presenceList = document.querySelector(".presence-list");
+  const scrolledDown = isScrolledDown();
   const children = [];
   for (const msg of Object.values(buffers).sort()) {
     if (msg && msg.name && msg.text) {
@@ -126,7 +130,7 @@ function renderBuffers() {
     }
   }
   presenceList.replaceChildren(...children);
-  document.querySelector(".messages").scrollTo(0, 999999);
+  if (scrolledDown) messages.scrollTo(0, messages.scrollHeight);
 }
 function changeName() {
   const name = document.querySelector(".name-input").value;
