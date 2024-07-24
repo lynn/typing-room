@@ -46,7 +46,10 @@ webSocketServer.on("request", (request) => {
   });
 
   connection.on("close", (reasonCode, description) => {
-    cxs = new Map([...cxs].filter(([k, v]) => v !== connection));
+    cxs = new Map([...cxs].filter(([k, v]) => {
+      if (v === connection) broadcast({ login: k, name: "", text: "" });
+      return v !== connection;
+    }));
     broadcast({users: cxs.size});
   });
 });
