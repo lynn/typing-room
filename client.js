@@ -9,16 +9,21 @@ const id = Math.random();
 let users = 0;
 let unread = 0;
 
-function coloredName(name) {
+function nameHash(name) {
   let deg = 0;
-  for (const c of name) deg = (223 * deg + c.charCodeAt(0)) % 360;
-  deg = 110 + 0.85 * deg; // avoid ugly yellows
+  for (const c of name+"x") deg = (223 * deg + c.charCodeAt(0)) % 360;
+  return deg;
+}
+
+function coloredName(name) {
+  const deg = 110 + 0.85 * nameHash(name); // avoid ugly yellows
   const span = document.createElement("span");
   span.append(name);
   span.style.color = `oklch(75% 0.15 ${deg})`;
   return span;
 }
 
+let oscIndex = 0;
 oscs = {};
 mods = {};
 const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -27,26 +32,29 @@ flt.type = "highshelf";
 flt.frequency.value = 1200;
 flt.gain.value = -10;
 flt.connect(ctx.destination);
-function beep(i, c) {
+function beep(name, c) {
   const time = ctx.currentTime;
+  const h = nameHash(name);
+  oscIndex = (oscIndex + 1) % 4;
+  const i = oscIndex;
   oscs[i] = ctx.createOscillator();
-  oscs[i].type = ["sawtooth", "triangle", "square", "sine"][i*999%4|0];
+  oscs[i].type = ["sawtooth", "triangle", "square", "sine"][i%4];
   const gain = ctx.createGain();
   gain.connect(flt);
-  const freq = (i + 0.6) * 300 * (Math.random() * 0.15 + 1);
+  const freq = (i/360 + 0.6) * 300 * (Math.random() * 0.1 + 1);
   const mul = c === '!' ? 1.4 : /\w/u.test(c) ? 1 : 0.6;
   oscs[i].frequency.setValueAtTime(freq*mul, time);
   oscs[i].connect(gain);
   oscs[i].start(time);
 
   if (oscs[i].type === "sine") {
-  const modgain = ctx.createGain();
-  modgain.gain.value = 800;
-  mods[i] = ctx.createOscillator();
-  modgain.connect(oscs[i].detune);
-  mods[i].connect(modgain);
-  mods[i].frequency.setValueAtTime(freq, time);
-  mods[i].start(time); mods[i].stop(time + 0.09);
+    const modgain = ctx.createGain();
+    modgain.gain.value = 800;
+    mods[i] = ctx.createOscillator();
+    modgain.connect(oscs[i].detune);
+    mods[i].connect(modgain);
+    mods[i].frequency.setValueAtTime(freq, time);
+    mods[i].start(time); mods[i].stop(time + 0.09);
   }
 
   gain.gain.setValueAtTime(0.1, time);
@@ -86,7 +94,7 @@ ws.onmessage = (event) => {
     document.querySelector(".user-count").innerText = msg.users === 1 ? "(nobody else here)" : `(${msg.users} users)`;
   } else if ("insert" in msg) {
     buffers[msg.id] ??= { id: msg.id, name: msg.name, start: msg.at+1, end: msg.at+1, text: "" };
-    if (/\S/u.test(msg.insert)) beep(Math.max(0, Math.min(1, msg.id)), msg.insert);
+    if (/\S/u.test(msg.insert)) beep(msg.name, msg.insert);
     const old = buffers[msg.id].text;
     buffers[msg.id].text = old.slice(0, msg.at) + msg.insert + old.slice(msg.at);
     buffers[msg.id].start = msg.at + 1;
@@ -94,7 +102,6 @@ ws.onmessage = (event) => {
     if (document.hidden && !document.title.includes("(")) document.title = `(*) Typing room`;
     renderBuffers();
   } else if ("text" in msg) {
-    // beep(Math.max(0, Math.min(1, msg.id)));
     buffers[msg.id] = msg;
     if (document.hidden && !document.title.includes("(")) document.title = `(*) Typing room`;
     renderBuffers();
@@ -157,7 +164,7 @@ function send(submit) {
     const end = compose.selectionEnd;
     const text = compose.value;
     if (!submit && lastName === name && lastText === text && lastStart === start && lastEnd === end) return;
-    if (start === end && !submit && text.slice(0, start-1) + text.slice(start) === lastText) {
+    if (name === lastName && start === end && !submit && text.slice(0, start-1) + text.slice(start) === lastText) {
       // this is an insertion
       const c = text[start-1];
       ws.send(JSON.stringify({ id, name, at: start-1, insert: c }));
