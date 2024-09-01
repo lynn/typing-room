@@ -1,9 +1,9 @@
 const compose = document.querySelector(".compose input");
 const messages = document.querySelector(".messages");
-const isScrolledDown = () => Math.ceil(messages.scrollHeight - messages.scrollTop) === messages.clientHeight;
+const isScrolledDown = () => Math.ceil(messages.scrollHeight - messages.scrollTop) >= messages.clientHeight;
 const stat = document.querySelector(".status");
 const url = new URLSearchParams(location.search).get("s") || location.hostname;
-const ws = new WebSocket(`ws://${url}:3434`);
+const ws = new WebSocket(`wss://${url}/chat`);
 let buffers = {};
 const id = Math.random();
 let users = 0;
@@ -11,7 +11,7 @@ let unread = 0;
 
 function nameHash(name) {
   let deg = 0;
-  for (const c of name+"x") deg = (223 * deg + c.charCodeAt(0)) % 360;
+  for (const c of name + "x") deg = (223 * deg + c.charCodeAt(0)) % 360;
   return deg;
 }
 
@@ -19,7 +19,12 @@ function coloredName(name) {
   const deg = 110 + 0.85 * nameHash(name); // avoid ugly yellows
   const span = document.createElement("span");
   span.append(name);
-  span.style.color = `oklch(75% 0.15 ${deg})`;
+  span.className = "username";
+  span.style.background = `oklch(65% 0.15 ${deg})`;
+  const hidden = document.createElement("span");
+  hidden.className = "hidden";
+  hidden.innerText = ": ";
+  span.append(hidden);
   return span;
 }
 
@@ -33,16 +38,17 @@ flt.frequency.value = 1200;
 flt.gain.value = -10;
 flt.connect(ctx.destination);
 function beep(name, c) {
+  if (document.hidden && !document.title.includes("(")) document.title = `(*) Typing room`;
   const time = ctx.currentTime;
   const h = nameHash(name);
   oscIndex = (oscIndex + 1) % 4;
   const i = oscIndex;
   oscs[i] = ctx.createOscillator();
-  oscs[i].type = ["sawtooth", "triangle", "square", "sine"][i%4];
+  oscs[i].type = ["sawtooth", "triangle", "square", "sine"][h%4];
   const gain = ctx.createGain();
   gain.connect(flt);
-  const freq = (i/360 + 0.6) * 300 * (Math.random() * 0.1 + 1);
-  const mul = c === '!' ? 1.4 : /\w/u.test(c) ? 1 : 0.6;
+  const freq = (h/360 + 0.6) * 300 * (Math.random() * 0.1 + 1);
+  const mul = c === '!' ? 1.4 : /\p{L}/u.test(c) ? 1 : 0.6;
   oscs[i].frequency.setValueAtTime(freq*mul, time);
   oscs[i].connect(gain);
   oscs[i].start(time);
@@ -81,29 +87,35 @@ ws.onerror = () => {
 };
 ws.onmessage = (event) => {
   const msg = JSON.parse(event.data);
-  console.log(msg);
   if (msg.submit) {
     const li = document.createElement("li");
+    li.append(coloredName(msg.name), msg.text);
     if (document.hidden) document.title = `(${++unread}) Typing room`;
-    li.append("<", coloredName(msg.name), "> " + msg.text);
+    // window.twemoji?.parse(li, { base: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/' });
+    window.linkifyElement?.(li, {target: "_blank"}, document);
     const scrolledDown = isScrolledDown();
     document.querySelector(".message-list").appendChild(li);
     buffers[msg.id] = null;
     renderBuffers();
   } else if (msg.users) {
     document.querySelector(".user-count").innerText = msg.users === 1 ? "(nobody else here)" : `(${msg.users} users)`;
+  } else if ("topic" in msg) {
+    if (msg.id !== id) document.querySelector("h1").innerText = msg.topic;
   } else if ("insert" in msg) {
     buffers[msg.id] ??= { id: msg.id, name: msg.name, start: msg.at+1, end: msg.at+1, text: "" };
-    if (/\S/u.test(msg.insert)) beep(msg.name, msg.insert);
+    if (/\S/u.test(msg.insert)) {
+      beep(msg.name, msg.insert);
+    }
     const old = buffers[msg.id].text;
     buffers[msg.id].text = old.slice(0, msg.at) + msg.insert + old.slice(msg.at);
     buffers[msg.id].start = msg.at + 1;
     buffers[msg.id].end = msg.at + 1;
-    if (document.hidden && !document.title.includes("(")) document.title = `(*) Typing room`;
     renderBuffers();
   } else if ("text" in msg) {
     buffers[msg.id] = msg;
-    if (document.hidden && !document.title.includes("(")) document.title = `(*) Typing room`;
+    if (/\S/u.test(msg.text)) {
+      beep(msg.name, "a");
+    }
     renderBuffers();
   } else if ("start" in msg) {
     const buffer = buffers[msg.id];
@@ -122,7 +134,7 @@ function renderBuffers() {
       const start = msg.start;
       const end = msg.end;
       const li = document.createElement("li");
-      li.append("<", coloredName(msg.name), "> " + msg.text.slice(0, start));
+      li.append(coloredName(msg.name), msg.text.slice(0, start));
       const span = document.createElement("span");
       if (start === end) {
         span.innerText = msg.text.slice(start); span.className = "cursor";
@@ -133,6 +145,8 @@ function renderBuffers() {
         after.innerText = msg.text.slice(end);
         li.append(span, after);
       }
+      // window.twemoji?.parse(li, { base: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/' });
+      window.linkifyElement?.(li, {target: "_blank"}, document);
       children.push(li);
     }
   }
@@ -168,7 +182,6 @@ function send(submit) {
       // this is an insertion
       const c = text[start-1];
       ws.send(JSON.stringify({ id, name, at: start-1, insert: c }));
-      console.log("yeah!", text, c);
     } else {
       ws.send(JSON.stringify({ id, name, start, end, text, submit: text && submit }));
     }
@@ -182,6 +195,11 @@ function send(submit) {
     }
   }
 }
+function setTopic(topic) {
+  if (ws.readyState === 1) {
+    ws.send(JSON.stringify({ id, topic }));
+  }
+}
 
 compose.addEventListener("keyup", (e) => {
   sendPos(compose.selectionStart, compose.selectionEnd);
@@ -193,6 +211,10 @@ compose.addEventListener("mouseup", (e) => {
 compose.addEventListener("input", (e) => {
   send(false);
 });
+document.querySelector("h1").addEventListener("input", (e) => {
+  setTopic(document.querySelector("h1").innerText)
+});
+
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) { unread = 0; document.title = "Typing room"; }
 });
