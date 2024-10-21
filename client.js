@@ -1,6 +1,6 @@
 const compose = document.querySelector(".compose input");
 const messages = document.querySelector(".messages");
-const isScrolledDown = () => Math.ceil(messages.scrollHeight - messages.scrollTop) >= messages.clientHeight;
+const isScrolledDown = () => messages.scrollHeight - messages.clientHeight - messages.scrollTop < 10;
 const stat = document.querySelector(".status");
 const url = new URLSearchParams(location.search).get("s") || location.hostname;
 const ws = new WebSocket(`wss://${url}/chat`);
@@ -8,6 +8,7 @@ let buffers = {};
 const id = Math.random();
 let users = 0;
 let unread = 0;
+let sendTimer = null;
 
 function nameHash(name) {
   let deg = 0;
@@ -18,58 +19,67 @@ function nameHash(name) {
 function coloredName(name) {
   const deg = 110 + 0.85 * nameHash(name); // avoid ugly yellows
   const span = document.createElement("span");
-  span.append(name);
   span.className = "username";
   span.style.background = `oklch(65% 0.15 ${deg})`;
-  const hidden = document.createElement("span");
-  hidden.className = "hidden";
-  hidden.innerText = ": ";
-  span.append(hidden);
+  const langle = document.createElement("span");
+  langle.className = "hidden";
+  langle.innerText = "<";
+  const rangle = document.createElement("span");
+  rangle.className = "hidden";
+  rangle.innerText = "> ";
+  span.append(langle, name, rangle);
   return span;
 }
 
-let oscIndex = 0;
-oscs = {};
-mods = {};
 const ctx = new (window.AudioContext || window.webkitAudioContext)();
 const flt = ctx.createBiquadFilter();
 flt.type = "highshelf";
 flt.frequency.value = 1200;
 flt.gain.value = -10;
 flt.connect(ctx.destination);
-function beep(name, c) {
+const real = new Float32Array([0,0,0,0,0,0,0,0]);
+const imag = new Float32Array([0,.7,0,.2,0,0,0,0]);
+const wave = ctx.createPeriodicWave(real, imag);
+
+function beep(name, c, delta) {
+  const d = delta?.length ?? 0;
   if (document.hidden && !document.title.includes("(")) document.title = `(*) Typing room`;
+  if (!document.querySelector("#sound-input")?.checked) return;
   const time = ctx.currentTime;
   const h = nameHash(name);
-  oscIndex = (oscIndex + 1) % 4;
-  const i = oscIndex;
-  oscs[i] = ctx.createOscillator();
-  oscs[i].type = ["sawtooth", "triangle", "square", "sine"][h%4];
+  const osc = ctx.createOscillator();
+  if (h%4 === 0) osc.setPeriodicWave(wave);
+  else osc.type = [null, "triangle", "square", "sine"][h%4];
   const gain = ctx.createGain();
   gain.connect(flt);
-  const freq = (h/360 + 0.6) * 300 * (Math.random() * 0.1 + 1);
+  const randomize = d > 3 ? [2/3,3/4,1,9/8,4/3][nameHash(delta) % 5] : (Math.random() * 0.05 + 1);
+  const freq = (h/360 + 0.6) * 300 * randomize;
   const mul = c === '!' ? 1.4 : /\p{L}/u.test(c) ? 1 : 0.6;
-  oscs[i].frequency.setValueAtTime(freq*mul, time);
-  oscs[i].connect(gain);
-  oscs[i].start(time);
+  osc.frequency.setValueAtTime(freq*mul, time);
+  osc.connect(gain);
+  osc.start(time);
 
-  if (oscs[i].type === "sine") {
+  let mod;
+  if (osc.type === "sine") {
     const modgain = ctx.createGain();
     modgain.gain.value = 800;
-    mods[i] = ctx.createOscillator();
-    modgain.connect(oscs[i].detune);
-    mods[i].connect(modgain);
-    mods[i].frequency.setValueAtTime(freq, time);
-    mods[i].start(time); mods[i].stop(time + 0.09);
+    mod = ctx.createOscillator();
+    modgain.connect(osc.detune);
+    mod.connect(modgain);
+    mod.frequency.setValueAtTime(freq*mul, time);
+    mod.start(time); mod.stop(time + 0.09);
   }
 
   gain.gain.setValueAtTime(0.1, time);
-  const decay = (c === '?' || c === '!') ? 0.05 : 0.03;
+  const decay = d > 3 ? 0.08 : (c === '?' || c === '!') ? 0.04 : 0.03;
   gain.gain.linearRampToValueAtTime(0, time + decay);
-  oscs[i].detune.setValueAtTime(0, time);
-  if (c === '?') oscs[i].detune.linearRampToValueAtTime(600, ctx.currentTime + 0.03);
-  if (c === '!') oscs[i].detune.linearRampToValueAtTime(-600, ctx.currentTime + 0.03);
-  oscs[i].stop(time + 0.09);
+  osc.detune.setValueAtTime(0, time);
+  if (c === '?' || c === '!') {
+    const d = c === '?' ? 600 : -600;
+    osc.detune.linearRampToValueAtTime(d, ctx.currentTime + 0.03);
+    mod?.detune?.linearRampToValueAtTime(d, ctx.currentTime + 0.03);
+  }
+  osc.stop(time + 0.09);
 }
 
 ws.onopen = () => {
@@ -77,14 +87,9 @@ ws.onopen = () => {
   stat.className = "status connected";
   ws.send(JSON.stringify({ login: id }));
 };
-ws.onclose = () => {
-  stat.innerHTML = "Closed";
-  stat.className = "status disconnected";
-};
-ws.onerror = () => {
-  stat.innerHTML = "Error";
-  stat.className = "status disconnected";
-};
+ws.onclose = () => { stat.innerHTML = "Closed"; stat.className = "status disconnected"; };
+ws.onerror = () => { stat.innerHTML = "Error"; stat.className = "status disconnected"; };
+
 ws.onmessage = (event) => {
   const msg = JSON.parse(event.data);
   if (msg.submit) {
@@ -96,6 +101,7 @@ ws.onmessage = (event) => {
     const scrolledDown = isScrolledDown();
     document.querySelector(".message-list").appendChild(li);
     buffers[msg.id] = null;
+    if (scrolledDown) messages.scrollTo(0, messages.scrollHeight);
     renderBuffers();
   } else if (msg.users) {
     document.querySelector(".user-count").innerText = msg.users === 1 ? "(nobody else here)" : `(${msg.users} users)`;
@@ -104,7 +110,7 @@ ws.onmessage = (event) => {
   } else if ("insert" in msg) {
     buffers[msg.id] ??= { id: msg.id, name: msg.name, start: msg.at+1, end: msg.at+1, text: "" };
     if (/\S/u.test(msg.insert)) {
-      beep(msg.name, msg.insert);
+      beep(msg.name, msg.insert, msg.insert);
     }
     const old = buffers[msg.id].text;
     buffers[msg.id].text = old.slice(0, msg.at) + msg.insert + old.slice(msg.at);
@@ -112,9 +118,10 @@ ws.onmessage = (event) => {
     buffers[msg.id].end = msg.at + 1;
     renderBuffers();
   } else if ("text" in msg) {
+    const old = buffers[msg.id]?.text;
     buffers[msg.id] = msg;
     if (/\S/u.test(msg.text)) {
-      beep(msg.name, "a");
+      beep(msg.name, "a", msg.text.substring(old ? old.length : 0));
     }
     renderBuffers();
   } else if ("start" in msg) {
@@ -125,6 +132,7 @@ ws.onmessage = (event) => {
     console.warn("unrecognized", msg);
   }
 };
+
 function renderBuffers() {
   const presenceList = document.querySelector(".presence-list");
   const scrolledDown = isScrolledDown();
@@ -172,6 +180,7 @@ function sendPos(start, end) {
   }
 }
 function send(submit) {
+  sendTimer = null; chording = 0;
   if (ws.readyState === 1) {
     const name = document.querySelector(".name-input").value;
     const start = compose.selectionStart;
@@ -192,6 +201,7 @@ function send(submit) {
     if (text && submit) {
       compose.value = "";
       compose.focus();
+      messages.scrollTo(0, messages.scrollHeight);
     }
   }
 }
@@ -205,12 +215,17 @@ compose.addEventListener("keyup", (e) => {
   sendPos(compose.selectionStart, compose.selectionEnd);
   if (e.key === "Enter") send(true);
 });
+
 compose.addEventListener("mouseup", (e) => {
   setTimeout(() => sendPos(compose.selectionStart, compose.selectionEnd), 50);
 });
+
 compose.addEventListener("input", (e) => {
-  send(false);
+  if (sendTimer) chording += 1;
+  clearTimeout(sendTimer);
+  sendTimer = setTimeout(() => send(false), 20);
 });
+
 document.querySelector("h1").addEventListener("input", (e) => {
   setTopic(document.querySelector("h1").innerText)
 });

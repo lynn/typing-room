@@ -18,7 +18,7 @@ const server = http.createServer((request, response) => {
         response.end('Internal Server Error');
       } else {
         response.writeHead(200, { 'Content-Type': 'text/html' });
-        response.end(data.replaceAll(/1f307/g, (Math.random() * 256 + 0x1f300 | 0).toString(16)));
+        response.end(data); // .replaceAll(/1f307/g, (Math.random() * 256 + 0x1f300 | 0).toString(16)));
       }
     });
   } else {
