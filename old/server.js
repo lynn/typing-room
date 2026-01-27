@@ -3,6 +3,9 @@ const http = require("http");
 const https = require("https");
 const fs = require("fs");
 const path = require("path");
+const readline = require('readline');
+
+let logfile = fs.createWriteStream("room.log", { flags: "a" });
 
 let cxs = new Map();
 const buffers = new Map();
@@ -13,6 +16,7 @@ const routes = {
   "/": "client.html",
   "/client.html": "client.html",
   "/client.js": "client.js",
+  "/simple.js": "simple.js",
   "/send.wav": "send.wav",
 };
 
@@ -25,20 +29,22 @@ const server = http.createServer((request, response) => {
         response.writeHead(500, { "Content-Type": "text/plain" });
         response.end("Internal Server Error");
       } else {
-        response.writeHead(200, { "Content-Type":
-          /\.wav$/.test(url) ? "audio/wav" :
-          /\.js$/.test(url) ? "text/javascript;charset=UTF-8" : "text/html" });
+        response.writeHead(200, {
+          "Content-Type":
+            /\.wav$/.test(url) ? "audio/wav" :
+              /\.js$/.test(url) ? "text/javascript;charset=UTF-8" : "text/html"
+        });
         response.end(data); // .replaceAll(/1f307/g, (Math.random() * 256 + 0x1f300 | 0).toString(16)));
       }
     });
   } else if (request.method === "GET" && url === "/vrtnws") {
-    https.get('https://www.vrt.be/vrtnws/_next/data/S1qALm8n-c22K82SZWsaL/nl.json', (externalResponse) => {
+    https.get('https://www.vrt.be/vrtnws/_next/data/u6iWbVYnh9kHIkeff4lxk/nl.json', (externalResponse) => {
       let data = '';
-      
+
       externalResponse.on('data', (chunk) => { data += chunk; });
-      
+
       externalResponse.on('end', () => {
-        response.writeHead(200, { 
+        response.writeHead(200, {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
         });
@@ -46,7 +52,7 @@ const server = http.createServer((request, response) => {
       });
     }).on('error', (error) => {
       console.error(`Error fetching VRT NWS data: ${error.message}`);
-      response.writeHead(500, { 'Content-Type': 'text/plain' ,'Access-Control-Allow-Origin': '*' });
+      response.writeHead(500, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' });
       response.end('Error fetching external data');
     });
 
@@ -68,34 +74,47 @@ const webSocketServer = new WebSocket({
 });
 
 const broadcast = (x) => {
-  for (const [k, v] of cxs.entries()) v.send(JSON.stringify(x));
+  for (const [k, v] of cxs.entries()) v.cx.send(JSON.stringify(x));
 };
+
+const tellUsers = () =>
+  broadcast({ users: [...cxs.values()].map(x => x.name) });
 
 webSocketServer.on("request", (request) => {
   console.log(request.origin, process.env.SPAT_ORIGIN);
   if (!request.origin.includes(process.env.SPAT_ORIGIN)) {
-    console.log("Nah");
+    console.log("rejecting", request.origin);
     request.reject();
     return;
   }
-  const connection = request.accept(null, request.origin);
+  const cx = request.accept(null, request.origin);
 
-  connection.on("message", (message) => {
+  cx.on("message", (message) => {
     if (message.utf8Data.length > 5000) return;
     const msg = JSON.parse(message.utf8Data);
     if ("login" in msg) {
-      cxs.set(msg.login, connection);
-      broadcast({ users: cxs.size });
+      cxs.set(msg.login, { cx, name: "anon" });
+      tellUsers();
       for (const [k, msg] of buffers.entries()) {
-        connection.send(JSON.stringify(msg));
+        cx.send(JSON.stringify(msg));
       }
-      connection.send(JSON.stringify({ topic }));
-      if (last) connection.send(JSON.stringify({ ...last, now: +new Date() }));
+      cx.send(JSON.stringify({ topic }));
+      if (last) cx.send(JSON.stringify({ ...last, now: +new Date() }));
     } else if ("text" in msg || "insert" in msg) {
       broadcast(msg);
       if (msg.submit) {
         last = { ...msg, submit: null, time: +new Date() };
-        console.log(`${new Date()} <\x1b[32m${msg.name}\x1b[0m> ${msg.text}`);
+        const c = cxs.get(msg.id);
+        console.log(c?.name);
+        if (c) {
+          if (c.name !== msg.name) {
+            c.name = msg.name;
+            tellUsers();
+          }
+        }
+        const logline = `${new Date().toISOString()} <\x1b[32m${msg.name}\x1b[0m> ${msg.text}`
+        console.log(logline);
+        logfile.write(`${logline}\n`);
         buffers.delete(msg.login);
       } else if ("text" in msg) {
         buffers.set(msg.login, msg);
@@ -112,14 +131,14 @@ webSocketServer.on("request", (request) => {
     }
   });
 
-  connection.on("close", (reasonCode, description) => {
+  cx.on("close", (reasonCode, description) => {
     cxs = new Map(
       [...cxs].filter(([k, v]) => {
-        if (v === connection) broadcast({ login: k, name: "", text: "" });
-        return v !== connection;
+        if (v.cx === cx) broadcast({ login: k, name: "", text: "" });
+        return v.cx !== cx;
       }),
     );
-    broadcast({ users: cxs.size });
+    tellUsers();
   });
 });
 
@@ -127,4 +146,13 @@ webSocketServer.on("request", (request) => {
 const port = Number(process.argv[2] ?? 3434);
 server.listen(port, "127.0.0.1", () => {
   console.log("WebSocket server is listening on port " + port);
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: true,
+  });
+
+  rl.on('line', (line) => {
+      console.log("!!!" + line);
+  });
 });

@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@1,300&display=swap" rel="stylesheet">
-  <!-- <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=Roboto+Serif:ital,opsz,wght@0,8..144,100..900;1,8..144,100..900&display=swap" rel="stylesheet"> -->
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=Roboto+Serif:ital,opsz,wght@0,8..144,100..900;1,8..144,100..900&display=swap" rel="stylesheet">
   <style>
     @font-face {
       font-family: "IosevkaToaqAile";
@@ -37,14 +37,27 @@
 
     :root {
       color-scheme: light dark;
-      --light-bg: #fff0f5; /* Soft pinkish-white */
-      --bg: light-dark(var(--light-bg), #453349); /* Cherry blossom pink for dark mode */
-      --fg: light-dark(#4a2c2a, #fff5f0); /* Warm brown for text */
-      --bord: light-dark(#d48c94, #ffccd5); /* Soft pinkish-red for borders */
-      --paper: light-dark(#ffe0e5, #503b53); /* Pale pink for paper, muted brownish-pink for dark mode */
-      --paper-fg: light-dark(#4a2c2a, #fff5f0); /* Matching text color */
-      --sel-fg: #fff0f5; /* Soft white-pink for selected text */
-      --sel-bg: #e85b80; /* Vibrant sakura pink for selection */
+/*
+      Spring:
+      --light-bg: #fff0f5; 
+      --bg: light-dark(var(--light-bg), #453349); 
+      --fg: light-dark(#4a2c2a, #fff5f0); 
+      --bord: light-dark(#d48c94, #ffccd5); 
+      --paper: light-dark(#ffe0e5, #503b53); 
+      --paper-fg: light-dark(#4a2c2a, #fff5f0); 
+      --sel-fg: #fff0f5; 
+      --sel-bg: #e85b80; 
+*/
+
+--light-bg: #fffbea; /* Warm sunny cream */
+--bg: light-dark(var(--light-bg), #00334d); /* Deep ocean blue for dark mode */
+--fg: light-dark(#2f2a1d, #fdf8e4); /* Dark warm brown for light mode, sandy beige for dark mode */
+--bord: light-dark(#ffd65b, #ffeb99); /* Golden sunlight borders */
+--paper: light-dark(#fff5cc, #004f66); /* Pale yellow paper, teal-blue for dark mode */
+--paper-fg: light-dark(#2f2a1d, #fdf8e4); /* Matching text color */
+--sel-fg: #fffbea; /* Light sandy cream for selected text */
+--sel-bg: #ff8c42; /* Sunset orange for selection */
+
 
 /*
       Winter:
@@ -90,7 +103,7 @@
     .history { filter: grayscale(); font-style: italic; }
     .history span { font-style: initial; }
     .divider { font-size: 10pt; display: flex; align-items: center; margin: 0.5rem 0; }
-    .divider hr { margin: auto 0.5rem; width: 100%; flex: 1; height: 1px; }
+    .divider hr { margin: auto 0.5rem; width: 100%; flex: 1; height: 1px; border: 1px solid var(--sel-bg); }
     .hard-marker { color: var(--sel-bg); }
     .invisible { color: transparent; visibility: hidden; }
     input.invisible { caret-color: var(--paper-fg); visibility: visible; }
@@ -102,8 +115,8 @@
       font-family: "IBM Plex Sans", IosevkaToaqAile, system-ui, "DejaVu Sans Mono", Tahoma, Verdana, Geneva, sans-serif;
     }
 
-    body h1 { line-height: 1; font-family: "IBM Plex Sans", IosevkaToaqEtoile, serif; font-weight: 300; font-style: italic; }
-    h1 input { width: 100%; background: none; border: 1px solid transparent; font: inherit; margin: 0; padding: 0px; letter-spacing: -1px; }
+    body h1 { line-height: 1; font-family: "Roboto Serif", IosevkaToaqEtoile, serif; font-weight: 700; font-style: italic }
+    h1 input { width: 100%; background: none; border: 1px solid transparent; font: inherit; margin: 0; padding: 0px; letter-spacing: 0px; }
 
     .container {
       max-width: 60em;
@@ -173,6 +186,7 @@
       <button type="button" onclick="send(true)">Submit</button>
     </div>
   </div>
+  <script src="simple.js"></script>
   <script src="client.js"></script>
 </body>
 
