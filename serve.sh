@@ -1,5 +1,5 @@
 #!/usr/bin/bash
 
-node server.js &
+bun server.ts &
 python3 -m http.server
 

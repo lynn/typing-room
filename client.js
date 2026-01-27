@@ -47,7 +47,7 @@ function divider(text) {
 
 function reconnect() {
   if (!ws || ws.readyState === 3) {
-    ws = new WebSocket(`wss://${url}/chat`);
+    ws = new WebSocket(window.location.hostname === "localhost" ? `ws://localhost:3434/chat` : `wss://${url}/chat`);
     ws.onopen = () => {
       stat.innerHTML = "Connected";
       stat.className = "status connected";
