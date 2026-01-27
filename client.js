@@ -17,6 +17,7 @@ const url = new URLSearchParams(location.search).get("s") || location.hostname;
 const simple = !!new URLSearchParams(location.search).get("simple");
 const hard = !!new URLSearchParams(location.search).get("hard");
 const invisible = !!new URLSearchParams(location.search).get("invisible");
+const small = !!new URLSearchParams(location.search).get("small");
 const room = new URLSearchParams(location.search).get("room") ?? "main";
 if (invisible) compose.className = "invisible";
 if (invisible) σ(".name-input").classList.add("invisible");
@@ -28,7 +29,7 @@ let sendTimer = null;
 
 function ser(msg) {
   const name = σ(".name-input").value;
-  return JSON.stringify({ id, name, simple, hard, room, ...msg });
+  return JSON.stringify({ id, name, simple, small, hard, room, ...msg });
 }
 
 function ago(ms) {
@@ -68,7 +69,7 @@ function reconnect() {
       speaker = msg.name;
       if (msg.submit) {
         const own = msg.id === id;
-        const li = η("li", { className: invisible && own ? "invisible" : "" });
+        const li = η("li", { className: invisible && own ? "invisible" : msg.small ? "smaller" : "" });
         li.append(coloredName(msg.name), msg.text);
         beep(msg);
         if (document.hidden) document.title = `(${++unread}) Typing room`;
@@ -89,7 +90,7 @@ function reconnect() {
         if (msg.id !== id) σ("h1 input").value = msg.topic.replaceAll("\n", "");
       } else if ("time" in msg) {
         // last message
-        const last = η("li");
+        const last = η("li", { className: msg.small ? "smaller" : "" });
         last.append(coloredName(msg.name), msg.text);
         last.className = "history";
         σ(".message-list").append(divider(ago(msg.now - msg.time)), last, divider("now"));
@@ -133,6 +134,7 @@ setInterval(reconnect, 1000);
 reconnect();
 
 function nameHash(name) {
+  if (name === "Robin") return 301;
   let deg = 0;
   for (const c of `${name}x`) deg = (223 * deg + c.charCodeAt(0)) % 360;
   return deg;
@@ -170,7 +172,7 @@ function playbeep(freq, wave, decay, bend, volume) {
   const osc = ctx.createOscillator();
   if (typeof wave === "string") osc.type = wave; else osc.setPeriodicWave(wave);
   osc.frequency.setValueAtTime(freq, time);
-  
+
   let mod;
   if (osc.type === "sine") {
     const modgain = ctx.createGain();
@@ -210,7 +212,7 @@ function beep(msg) {
   const wave = [mywave, "triangle", "square", "sine"][h % 4];
   const variance = h % 7 / 7 * 0.17;
   const randomize = steno ? 1 : Math.random() * variance + 1;
-  let freq = (h / 360 + 0.6) * 300 * randomize;
+  let freq = (h / 360 + 0.6) * 300 * randomize * (msg.small ? 1.55 : 1);
   const mul = submit ? 2 : c === "!" ? 1.4 : /\p{L}/u.test(c) ? 1 : 0.6;
   const freqs = /^\d+$/.test(c) ? [...new Set([...c])].map((x) =>
     440 * [5/2, 1, 9/8, 5/4, 4/3, 3/2, 5/3, 15/8, 2, 9/4][+x]
@@ -250,7 +252,7 @@ function renderBuffers() {
       }
       const start = msg.start;
       const end = msg.end;
-      const li = η("li", { className: invisible && own ? "invisible" : "" });
+      const li = η("li", { className: invisible && own ? "invisible" : msg.small ? "smaller" : "" });
       li.append(
         coloredName(msg.name, true),
         msg.hard ? η("span", { className: "hard-marker" }, ["* "]) : "",
@@ -290,7 +292,7 @@ let lastEnd = 0;
 function sendPos(start, end) {
   if (lastStart === start && lastEnd === end) return;
   if (ws && ws.readyState === 1) {
-    ws.send(ser({ id, name, simple, start, end }));
+    ws.send(ser({ id, name, simple, small, start, end }));
     lastStart = start;
     lastEnd = end;
   }
